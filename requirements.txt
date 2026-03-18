@@ -1,0 +1,32 @@
+# Core ML/AI libraries
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+git+https://github.com/openai/CLIP.git
+faiss-cpu>=1.7.4  # Use faiss-gpu if you have CUDA
+
+# LLM integration (Ollama)
+requests>=2.31.0
+
+# Image processing
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Data storage
+python-dotenv>=1.0.0
+
+# BirdNET (optional - for audio classification demo)
+birdnetlib>=0.14.0
+tensorflow>=2.20.0  # Required by BirdNET
+librosa>=0.10.0  # Audio processing (dependency of birdnetlib)
+soundfile>=0.12.0  # Audio file I/O (dependency of librosa)
+
+# CLI/UI
+click>=8.1.0
+rich>=13.0.0
+streamlit>=1.28.0
+
+# Utilities
+pydantic>=2.0.0
+typing-extensions>=4.5.0
+
