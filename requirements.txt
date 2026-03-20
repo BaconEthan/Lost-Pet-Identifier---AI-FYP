@@ -20,6 +20,8 @@ birdnetlib>=0.14.0
 tensorflow>=2.20.0  # Required by BirdNET
 librosa>=0.10.0  # Audio processing (dependency of birdnetlib)
 soundfile>=0.12.0  # Audio file I/O (dependency of librosa)
+resampy>=0.2.0  # Required by librosa for resampling
+pydub>=0.25.1  # Used for optional WAV conversion (BirdNET audio pipeline)
 
 # CLI/UI
 click>=8.1.0

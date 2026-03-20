@@ -73,6 +73,11 @@ def main():
             "title": "Lost: Brown Dog"
         },
         {
+            "description": "Bird heard nearby, audio available",
+            "title": "Lost: Bird (Audio-Enabled)",
+            "audio_path": None
+        },
+        {
             "description": "Small dog with floppy ears",
             "title": "Lost: Small Dog"
         },
@@ -87,6 +92,7 @@ def main():
         console.print(f"Query: \"{query['description']}\"\n")
         
         results = identifier.search_lost_pet(
+            audio_path=query.get("audio_path"),
             description=query['description'],
             k=3,
             include_explanation=True

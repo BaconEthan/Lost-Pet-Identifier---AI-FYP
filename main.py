@@ -46,14 +46,15 @@ def cli(ctx, db_path, ollama_url, ollama_model):
 
 @cli.command()
 @click.option('--image', '-i', type=click.Path(exists=True), help='Path to pet image')
+@click.option('--audio', '-a', type=click.Path(exists=True), help='Path to pet audio (optional, e.g., bird calls)')
 @click.option('--description', '-d', type=str, help='Text description of the pet')
 @click.option('--location', '-l', type=str, help='Location where pet was found')
 @click.option('--date', type=str, help='Date when pet was found')
 @click.pass_context
-def add_found(ctx, image, description, location, date):
+def add_found(ctx, image, audio, description, location, date):
     """Add a found pet to the database."""
-    if not image and not description:
-        console.print("[red]Error: At least one of --image or --description is required[/red]")
+    if not image and not description and not audio:
+        console.print("[red]Error: At least one of --image, --audio, or --description is required[/red]")
         return
     
     console.print("[cyan]Initializing Lost Pet Identifier...[/cyan]")
@@ -67,6 +68,7 @@ def add_found(ctx, image, description, location, date):
     try:
         idx = identifier.add_found_pet(
             image_path=image,
+            audio_path=audio,
             description=description,
             location=location,
             date=date
@@ -80,13 +82,14 @@ def add_found(ctx, image, description, location, date):
 
 @cli.command()
 @click.option('--image', '-i', type=click.Path(exists=True), help='Path to lost pet image')
+@click.option('--audio', '-a', type=click.Path(exists=True), help='Path to lost pet audio (optional, e.g., bird calls)')
 @click.option('--description', '-d', type=str, help='Text description of the lost pet')
 @click.option('--top-k', '-k', default=5, type=int, help='Number of top results to return')
 @click.pass_context
-def search(ctx, image, description, top_k):
+def search(ctx, image, audio, description, top_k):
     """Search for a lost pet in the database."""
-    if not image and not description:
-        console.print("[red]Error: At least one of --image or --description is required[/red]")
+    if not image and not description and not audio:
+        console.print("[red]Error: At least one of --image, --audio, or --description is required[/red]")
         return
     
     console.print("[cyan]Initializing Lost Pet Identifier...[/cyan]")
@@ -104,6 +107,7 @@ def search(ctx, image, description, top_k):
     try:
         results_dict = identifier.search_lost_pet(
             image_path=image,
+            audio_path=audio,
             description=description,
             k=top_k,
             include_explanation=True
@@ -125,6 +129,7 @@ def search(ctx, image, description, top_k):
         table.add_column("Description", width=40)
         table.add_column("Location", width=20)
         table.add_column("Image", width=30)
+        table.add_column("BirdNET", width=22)
         
         for i, result in enumerate(results, 1):
             similarity = result['similarity_score']
@@ -133,6 +138,10 @@ def search(ctx, image, description, top_k):
             img_path = result.get('image_path', 'N/A')
             if img_path and len(img_path) > 30:
                 img_path = "..." + img_path[-27:]
+
+            md = result.get("metadata") or {}
+            birdnet_species = md.get("birdnet_top_species") or None
+            birdnet_cell = (str(birdnet_species)[:22] if birdnet_species else "N/A")
             
             # Color code similarity
             if similarity > 0.7:
@@ -147,7 +156,8 @@ def search(ctx, image, description, top_k):
                 f"[{sim_color}]{similarity:.3f}[/{sim_color}]",
                 desc,
                 location,
-                img_path
+                img_path,
+                birdnet_cell
             )
         
         console.print(table)
