@@ -19,6 +19,7 @@ print("\n=== Adding Found Pets ===")
 # Found pet 1
 identifier.add_found_pet(
     image_path=None,  # Replace with actual image path
+    audio_path=None,  # Replace with actual audio path (optional, e.g., bird calls)
     description="Small brown dog with floppy ears, friendly, found near Bukit Timah",
     location="Bukit Timah",
     date="2024-01-15"
@@ -39,6 +40,7 @@ print("\n=== Searching for Lost Pet ===")
 
 results = identifier.search_lost_pet(
     image_path=None,  # Replace with actual image path
+    audio_path=None,  # Replace with actual audio path (optional)
     description="Brown dog, friendly, last seen near Bukit Timah",
     k=5,
     include_explanation=True

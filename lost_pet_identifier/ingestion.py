@@ -65,6 +65,7 @@ class DataIngestion:
     def create_metadata(
         self,
         image_path: Optional[str] = None,
+        audio_path: Optional[str] = None,
         description: Optional[str] = None,
         location: Optional[str] = None,
         date: Optional[str] = None,
@@ -85,10 +86,12 @@ class DataIngestion:
         """
         metadata = {
             "image_path": image_path,
+            "audio_path": audio_path,
             "description": description or "",
             "location": location,
             "date": date,
             "has_image": image_path is not None and os.path.exists(image_path) if image_path else False,
+            "has_audio": audio_path is not None and os.path.exists(audio_path) if audio_path else False,
             "has_text": bool(description and description.strip())
         }
         

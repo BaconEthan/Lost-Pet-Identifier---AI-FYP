@@ -112,7 +112,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["Search Lost Pet", "Add Found Pet", "BirdNET D
 
 with tab1:
     st.header("Search for a Lost Pet")
-    st.markdown("Upload an image and/or provide a description to find potential matches.")
+    st.markdown("Upload an image and/or provide a description and/or audio to find potential matches.")
     
     col1, col2 = st.columns([1, 1])
     
@@ -122,6 +122,12 @@ with tab1:
             "Upload Pet Image (Optional)",
             type=['jpg', 'jpeg', 'png'],
             help="Upload an image of the lost pet"
+        )
+
+        uploaded_audio = st.file_uploader(
+            "Upload Pet Audio (Optional)",
+            type=['wav', 'mp3', 'flac', 'm4a', 'ogg'],
+            help="Upload audio (e.g., bird calls). If needed, the app will attempt conversion to WAV."
         )
         
         description = st.text_area(
@@ -142,8 +148,8 @@ with tab1:
             st.info("No image uploaded")
     
     if search_button:
-        if not uploaded_image and not description:
-            st.error("Please provide at least an image or description to search.")
+        if not uploaded_image and not uploaded_audio and not description:
+            st.error("Please provide at least an image, audio, or description to search.")
         elif st.session_state.database_size == 0:
             st.warning("Database is empty! Please add some found pets first.")
         else:
@@ -154,10 +160,18 @@ with tab1:
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
                         image.save(tmp_file.name)
                         image_path = tmp_file.name
+
+                audio_path = None
+                if uploaded_audio:
+                    suffix = f".{uploaded_audio.name.split('.')[-1]}" if uploaded_audio.name and "." in uploaded_audio.name else ".wav"
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_audio:
+                        tmp_audio.write(uploaded_audio.getvalue())
+                        audio_path = tmp_audio.name
                 
                 try:
                     results = st.session_state.identifier.search_lost_pet(
                         image_path=image_path,
+                        audio_path=audio_path,
                         description=description,
                         k=top_k,
                         include_explanation=include_explanation
@@ -166,6 +180,8 @@ with tab1:
                     # Clean up temp file
                     if image_path and os.path.exists(image_path):
                         os.unlink(image_path)
+                    if audio_path and os.path.exists(audio_path):
+                        os.unlink(audio_path)
                     
                     if results['results']:
                         st.success(f"Found {len(results['results'])} potential matches!")
@@ -210,6 +226,13 @@ with tab1:
                                     
                                     if result.get('date'):
                                         st.markdown(f"**Date:** {result['date']}")
+
+                                    md = result.get("metadata") or {}
+                                    if md.get("birdnet_top_species"):
+                                        st.markdown(
+                                            f"**BirdNET (top species):** {md.get('birdnet_top_species')} "
+                                            f"(conf: {md.get('birdnet_top_confidence')})"
+                                        )
                                 
                                 st.divider()
                         
@@ -224,6 +247,8 @@ with tab1:
                     st.error(f"Error during search: {str(e)}")
                     if image_path and os.path.exists(image_path):
                         os.unlink(image_path)
+                    if audio_path and os.path.exists(audio_path):
+                        os.unlink(audio_path)
 
 with tab2:
     st.header("Add a Found Pet")
@@ -238,6 +263,13 @@ with tab2:
             type=['jpg', 'jpeg', 'png'],
             key="found_image",
             help="Upload an image of the found pet"
+        )
+
+        found_audio = st.file_uploader(
+            "Upload Pet Audio (Optional)",
+            type=['wav', 'mp3', 'flac', 'm4a', 'ogg'],
+            key="found_audio",
+            help="Upload audio (e.g., bird calls). If needed, the app will attempt conversion to WAV."
         )
         
         found_description = st.text_area(
@@ -269,8 +301,8 @@ with tab2:
             st.info("No image uploaded")
     
     if add_button:
-        if not found_image and not found_description:
-            st.error("Please provide at least an image or description.")
+        if not found_image and not found_audio and not found_description:
+            st.error("Please provide at least an image, audio, or description.")
         else:
             with st.spinner("Adding pet to database..."):
                 # Save uploaded image temporarily
@@ -279,10 +311,18 @@ with tab2:
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
                         preview_image.save(tmp_file.name)
                         image_path = tmp_file.name
+
+                audio_path = None
+                if found_audio:
+                    suffix = f".{found_audio.name.split('.')[-1]}" if found_audio.name and "." in found_audio.name else ".wav"
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_audio:
+                        tmp_audio.write(found_audio.getvalue())
+                        audio_path = tmp_audio.name
                 
                 try:
                     idx = st.session_state.identifier.add_found_pet(
                         image_path=image_path,
+                        audio_path=audio_path,
                         description=found_description,
                         location=found_location if found_location else None,
                         date=str(found_date) if found_date else None
@@ -291,6 +331,8 @@ with tab2:
                     # Clean up temp file
                     if image_path and os.path.exists(image_path):
                         os.unlink(image_path)
+                    if audio_path and os.path.exists(audio_path):
+                        os.unlink(audio_path)
                     
                     st.success(f"Successfully added found pet (index: {idx})!")
                     st.session_state.database_size = st.session_state.identifier.get_database_size()
@@ -303,20 +345,24 @@ with tab2:
                     st.error(f"Error adding pet: {str(e)}")
                     if image_path and os.path.exists(image_path):
                         os.unlink(image_path)
+                    if audio_path and os.path.exists(audio_path):
+                        os.unlink(audio_path)
 
 with tab3:
     st.header("BirdNET Audio Classification Demo")
     st.markdown("""
-    **Evidence of Model Exploration and Evaluation**
+    BirdNET is now **integrated into the main pipeline** as an optional audio modality.
     
-    This demo shows BirdNET audio classification capabilities and demonstrates how it would integrate 
-    with the main Lost Pet Identifier pipeline.
+    This tab still lets you inspect BirdNET’s raw detections, but you can also upload audio in
+    **Search Lost Pet** / **Add Found Pet** and it will influence retrieval via a CLIP-embedded
+    BirdNET-derived text prompt.
     """)
     
     # Audio conversion section
     st.subheader("Step 1: Convert Audio to WAV (Optional)")
     st.info("""
-    **Recommended:** Convert MP3/FLAC to WAV for best compatibility. WAV files work without ffmpeg.
+    BirdNET works best with WAV. The main pipeline also attempts conversion when audio isn't WAV,
+    but this step can help the demo tab as well (especially for MP3/FLAC).
     """)
     
     convert_tab1, convert_tab2 = st.tabs(["Convert Audio", "Upload WAV File"])
@@ -537,38 +583,11 @@ with tab3:
                     os.unlink(tmp_path)
     
     st.divider()
-    st.subheader("Integration Status")
-    
-    st.markdown("""
-    **Why BirdNET is not fully wired into FAISS yet:**
-    
-    1. **Audio Processing Pipeline**
-       - Requires audio file preprocessing and segmentation
-       - BirdNET works on 3-second audio chunks
-       - Need to handle longer recordings (sliding window)
-    
-    2. **Integration Complexity**
-       - Audio → Text conversion (BirdNET → CLIP prompt)
-       - Text → Embedding (CLIP text encoder)
-       - Embedding → FAISS storage
-       - Requires additional data pipeline components
-    
-    3. **Evaluation Status**
-       - BirdNET accuracy validated on test audio
-       - Integration architecture designed
-       - Pending full pipeline implementation
-    
-    4. **Current Status**
-       - BirdNET model exploration: COMPLETE
-       - Audio classification: WORKING
-       - CLIP integration path: DESIGNED
-       - FAISS integration: PLANNED
-    """)
-    
+    st.subheader("Integration Notes")
     st.info("""
-    This demo provides evidence of model exploration and evaluation, demonstrating 
-    understanding of BirdNET capabilities and integration architecture, even though 
-    full integration is deferred to maintain focus on the core similarity matching prototype.
+    In the integrated pipeline, BirdNET detections are stored as metadata (top species + confidences),
+    and converted into a short text prompt (e.g., "bird, American Robin") that is embedded with CLIP
+    alongside your normal description text.
     """)
 
 with tab4:

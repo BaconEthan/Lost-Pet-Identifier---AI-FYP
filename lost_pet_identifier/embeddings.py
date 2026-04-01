@@ -2,12 +2,15 @@
 CLIP embedding generation for images and text.
 """
 
+import os
+# Mitigate OpenMP/MKL duplicate runtime issues on macOS.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 import torch
 import clip
 from PIL import Image
 from typing import Union, List, Optional
 import numpy as np
-import os
 
 
 class CLIPEmbedder:

@@ -9,6 +9,7 @@ from pathlib import Path
 from .ingestion import DataIngestion
 from .embeddings import CLIPEmbedder
 from .llm_extractor import LLMFeatureExtractor
+from .birdnet_classifier import BirdNetClassifier
 from .vector_db import VectorDatabase
 from .matcher import SimilarityMatcher
 from .explainer import ResultExplainer
@@ -23,7 +24,9 @@ class LostPetIdentifier:
         ollama_url: str = "http://localhost:11434",
         ollama_model: str = "llama2",
         vector_db_path: Optional[str] = None,
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        enable_birdnet: bool = True,
+        birdnet_min_confidence: float = 0.1,
     ):
         """
         Initialize the lost pet identifier system.
@@ -42,6 +45,9 @@ class LostPetIdentifier:
             base_url=ollama_url,
             model=ollama_model
         )
+
+        self.birdnet_min_confidence = float(birdnet_min_confidence)
+        self.birdnet = BirdNetClassifier() if enable_birdnet else None
         
         # Initialize vector database
         embedding_dim = self.embedder.get_embedding_dim()
@@ -60,6 +66,7 @@ class LostPetIdentifier:
     def add_found_pet(
         self,
         image_path: Optional[str] = None,
+        audio_path: Optional[str] = None,
         description: Optional[str] = None,
         location: Optional[str] = None,
         date: Optional[str] = None,
@@ -84,6 +91,14 @@ class LostPetIdentifier:
         image = None
         if image_path:
             image = self.ingestion.load_image(image_path)
+
+        # Optional audio -> BirdNET -> (text prompt + metadata)
+        birdnet_text = ""
+        birdnet_features: Dict[str, Any] = {}
+        if audio_path and self.birdnet is not None and getattr(self.birdnet, "available", False):
+            detections = self.birdnet.analyze(audio_path, min_confidence=self.birdnet_min_confidence)
+            birdnet_text = self.birdnet.format_for_clip(detections)
+            birdnet_features = self.birdnet.to_metadata(detections)
         
         # Extract structured features from description
         if description:
@@ -93,23 +108,36 @@ class LostPetIdentifier:
             features = {}
             normalized_text = ""
         
+        # Combine text signals (LLM-normalized + BirdNET prompt if present)
+        text_parts: List[str] = []
+        if normalized_text and normalized_text.strip():
+            text_parts.append(normalized_text)
+        elif description:
+            text_parts.append(description)
+        if birdnet_text:
+            text_parts.append(birdnet_text)
+        combined_text = " | ".join(text_parts)
+
         # Generate embedding
         embedding = self.embedder.embed_multimodal(
             image=image,
-            text=normalized_text if normalized_text else description,
+            text=combined_text,
             fusion_method="average"
         )
         
         # Create metadata
         metadata = self.ingestion.create_metadata(
             image_path=image_path,
+            audio_path=audio_path,
             description=description,
             location=location,
             date=date,
             additional_info={
                 **(additional_metadata or {}),
                 "extracted_features": features,
-                "normalized_text": normalized_text
+                "normalized_text": normalized_text,
+                "birdnet_text": birdnet_text,
+                **birdnet_features,
             }
         )
         
@@ -125,6 +153,7 @@ class LostPetIdentifier:
     def search_lost_pet(
         self,
         image_path: Optional[str] = None,
+        audio_path: Optional[str] = None,
         description: Optional[str] = None,
         k: int = 5,
         include_explanation: bool = True,
@@ -153,11 +182,26 @@ class LostPetIdentifier:
         if description:
             features = self.llm_extractor.extract_features(description)
             normalized_text = self.llm_extractor.features_to_text(features)
+
+        birdnet_text = ""
+        if audio_path and self.birdnet is not None and getattr(self.birdnet, "available", False):
+            detections = self.birdnet.analyze(audio_path, min_confidence=self.birdnet_min_confidence)
+            birdnet_text = self.birdnet.format_for_clip(detections)
+
+        # Combine description + BirdNET prompt
+        text_parts: List[str] = []
+        if normalized_text and normalized_text.strip():
+            text_parts.append(normalized_text)
+        elif description:
+            text_parts.append(description)
+        if birdnet_text:
+            text_parts.append(birdnet_text)
+        combined_text = " | ".join(text_parts) if text_parts else None
         
         # Perform matching
         results = self.matcher.match(
             image=image,
-            text=normalized_text if normalized_text else description,
+            text=combined_text,
             k=k,
             fusion_method=fusion_method
         )
@@ -165,7 +209,12 @@ class LostPetIdentifier:
         # Generate explanation if requested
         explanation = None
         if include_explanation:
-            query_desc = description or "image-based search"
+            query_desc_parts: List[str] = []
+            if description:
+                query_desc_parts.append(description)
+            if birdnet_text:
+                query_desc_parts.append(f"(audio: {birdnet_text})")
+            query_desc = " ".join(query_desc_parts) if query_desc_parts else "image-based search"
             explanation = self.explainer.explain_results(query_desc, results, top_n=min(3, k))
         
         return {
@@ -173,8 +222,11 @@ class LostPetIdentifier:
             "explanation": explanation,
             "query": {
                 "has_image": image is not None,
+                "has_audio": bool(audio_path),
+                "audio_path": audio_path,
                 "description": description,
                 "normalized_description": normalized_text,
+                "birdnet_text": birdnet_text,
                 "fusion_method": fusion_method
             }
         }
